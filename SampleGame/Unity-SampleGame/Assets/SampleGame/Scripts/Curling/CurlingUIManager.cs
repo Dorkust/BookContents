@@ -1,14 +1,16 @@
 /*
- * Curling Game - CurlingUIManager
+ * Curling Game - CurlingUIManager  (iOS touch edition)
  *
  * Drives all HUD elements:
  *   • Scoreboard (running totals per team, per end)
  *   • Power bar (shows throw charge level)
  *   • Turn indicator (whose turn it is, spin direction)
- *   • Game-over panel
+ *   • Spin toggle buttons (replaces Q/E keyboard shortcuts on iOS)
+ *   • Sweep indicator
+ *   • Game-over panel with restart button
  *
  * Uses Unity's built-in UI system (UnityEngine.UI).
- * Wire up references in the Inspector.
+ * Wire up all references in the Inspector.
  */
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,19 +21,27 @@ namespace Curling
     public class CurlingUIManager : MonoBehaviour
     {
         // ── Inspector references ─────────────────────────────────────────────
-        [Header("HUD")]
+        [Header("HUD Labels")]
         public Text EndLabel;           // "End 3 / 10"
-        public Text TurnLabel;          // "Red's turn"
-        public Text SpinLabel;          // "Spin: ← Left"
+        public Text TurnLabel;          // "Red's turn  (6 stones left)"
+        public Text SpinLabel;          // "Spin: → Right"
         public Text ScoreLabel;         // "Red 4  –  Yellow 3"
-        public Slider PowerSlider;      // fill = CurrentPower
+
+        [Header("Power Bar")]
+        public Slider PowerSlider;      // fill = CurrentPower (0..1)
+
+        [Header("Spin Toggle Buttons")]
+        [Tooltip("On-screen button that sets spin to left curl (replaces Q key)")]
+        public Button SpinLeftButton;
+        [Tooltip("On-screen button that sets spin to right curl (replaces E key)")]
+        public Button SpinRightButton;
 
         [Header("Sweep Indicator")]
-        public Image SweepIcon;         // lights up while sweeping
+        public Image SweepIcon;         // tinted cyan while player is sweeping
 
         [Header("Game Over Panel")]
         public GameObject GameOverPanel;
-        public Text WinnerLabel;        // "Red wins! 7 – 5"
+        public Text WinnerLabel;        // "Red wins!  7 – 5"
         public Button RestartButton;
 
         // ── Private references ───────────────────────────────────────────────
@@ -43,17 +53,24 @@ namespace Curling
         private void Start()
         {
             _gameManager = FindFirstObjectByType<CurlingGameManager>();
-            _shooter = FindFirstObjectByType<StoneShooter>();
-            _sweeper = FindFirstObjectByType<SweepSystem>();
+            _shooter     = FindFirstObjectByType<StoneShooter>();
+            _sweeper     = FindFirstObjectByType<SweepSystem>();
 
-            // Subscribe to game events for panel updates
             _gameManager.OnGameComplete += ShowGameOverPanel;
 
             if (GameOverPanel != null)
                 GameOverPanel.SetActive(false);
 
+            // Restart button
             if (RestartButton != null)
                 RestartButton.onClick.AddListener(RestartGame);
+
+            // Spin buttons — wire directly to StoneShooter methods
+            if (SpinLeftButton != null)
+                SpinLeftButton.onClick.AddListener(_shooter.SetSpinLeft);
+
+            if (SpinRightButton != null)
+                SpinRightButton.onClick.AddListener(_shooter.SetSpinRight);
         }
 
         private void Update()
@@ -67,9 +84,10 @@ namespace Curling
             UpdatePowerBar();
             UpdateSweepIcon();
             UpdateSpinLabel();
+            UpdateSpinButtonHighlights();
         }
 
-        // ── Per-frame UI updates ─────────────────────────────────────────────
+        // ── Per-frame HUD updates ────────────────────────────────────────────
 
         private void UpdateEndLabel()
         {
@@ -104,8 +122,6 @@ namespace Curling
         {
             if (PowerSlider == null || _shooter == null) return;
             PowerSlider.value = _shooter.CurrentPower;
-
-            // Hide bar when not charging
             PowerSlider.gameObject.SetActive(_shooter.IsCharging);
         }
 
@@ -120,8 +136,31 @@ namespace Curling
         private void UpdateSpinLabel()
         {
             if (SpinLabel == null || _shooter == null) return;
-            string dir = _shooter.SpinDirection > 0 ? "→ Right  (E)" : "← Left  (Q)";
+            string dir = _shooter.SpinDirection > 0 ? "→ Right" : "← Left";
             SpinLabel.text = $"Spin: {dir}";
+        }
+
+        private void UpdateSpinButtonHighlights()
+        {
+            /*   Highlight the active spin button so the player can
+             *   see the current selection at a glance on a small screen. */
+            if (_shooter == null) return;
+
+            bool rightActive = _shooter.SpinDirection > 0;
+
+            if (SpinRightButton != null)
+            {
+                ColorBlock cb = SpinRightButton.colors;
+                cb.normalColor = rightActive ? Color.cyan : Color.white;
+                SpinRightButton.colors = cb;
+            }
+
+            if (SpinLeftButton != null)
+            {
+                ColorBlock cb = SpinLeftButton.colors;
+                cb.normalColor = rightActive ? Color.white : Color.cyan;
+                SpinLeftButton.colors = cb;
+            }
         }
 
         // ── Game over ────────────────────────────────────────────────────────
